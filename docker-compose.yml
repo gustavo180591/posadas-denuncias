@@ -1,44 +1,54 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:14-alpine
-    environment:
-      POSTGRES_DB: posadas_denuncias
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: 12345678
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U root"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
-    environment:
-      NODE_ENV: development
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: posadas_denuncias
-      DB_USER: root
-      DB_PASSWORD: 12345678
-      JWT_SECRET: your_jwt_secret_key
-      JWT_REFRESH_SECRET: your_jwt_refresh_secret_key
-      JWT_RESET_SECRET: your_jwt_reset_secret_key
-    volumes:
-      - .:/app
-      - /app/node_modules
+      context: ./backend
+      dockerfile: ../docker/backend/Dockerfile
     ports:
       - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASS=root
+      - DB_NAME=sac_db
+      - JWT_SECRET=your_jwt_secret_here
     depends_on:
-      db:
-        condition: service_healthy
+      - db
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - sac-network
+
+  db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=sac_db
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - sac-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./frontend/build:/usr/share/nginx/html
+    depends_on:
+      - backend
+    networks:
+      - sac-network
 
 volumes:
-  postgres_data: 
+  mysql-data:
+
+networks:
+  sac-network:
+    driver: bridge 

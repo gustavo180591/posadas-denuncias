@@ -2,10 +2,10 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Configuración de almacenamiento
+// Configurar almacenamiento
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = process.env.UPLOAD_DIR || 'uploads';
+    const uploadDir = path.join(__dirname, '../../uploads');
     
     // Crear directorio si no existe
     if (!fs.existsSync(uploadDir)) {
@@ -22,57 +22,29 @@ const storage = multer.diskStorage({
   }
 });
 
-// Filtro de archivos permitidos
+// Filtrar archivos
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = {
-    'image/jpeg': '.jpg',
-    'image/png': '.png',
-    'image/gif': '.gif',
-    'video/mp4': '.mp4',
-    'audio/mpeg': '.mp3',
-    'audio/wav': '.wav'
-  };
-
-  if (allowedTypes[file.mimetype]) {
+  // Tipos de archivo permitidos
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4'];
+  
+  if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Tipo de archivo no permitido'), false);
+    cb(new Error('Tipo de archivo no permitido. Solo se permiten imágenes (JPEG, PNG, GIF) y videos (MP4).'), false);
   }
 };
 
-// Configuración de multer
+// Configurar límites
+const limits = {
+  fileSize: 10 * 1024 * 1024, // 10MB
+  files: 5 // Máximo 5 archivos por denuncia
+};
+
+// Crear middleware de upload
 const upload = multer({
   storage,
   fileFilter,
-  limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024 // 5MB por defecto
-  }
+  limits
 });
 
-// Middleware para manejar errores de carga
-const handleUploadError = (err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        success: false,
-        error: 'El archivo excede el tamaño máximo permitido'
-      });
-    }
-    return res.status(400).json({
-      success: false,
-      error: 'Error al cargar el archivo'
-    });
-  }
-  if (err) {
-    return res.status(400).json({
-      success: false,
-      error: err.message
-    });
-  }
-  next();
-};
-
-module.exports = {
-  upload,
-  handleUploadError
-}; 
+module.exports = upload; 

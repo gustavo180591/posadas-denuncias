@@ -1,310 +1,331 @@
-const { Denuncia, Evidencia, User } = require('../models');
+const Denuncia = require('../models/Denuncia');
+const Evidencia = require('../models/Evidencia');
 const { Op } = require('sequelize');
-const mapsService = require('../services/maps.service');
+const path = require('path');
 
-// Crear una nueva denuncia
-const createDenuncia = async (req, res, next) => {
+// Crear denuncia
+exports.createDenuncia = async (req, res) => {
   try {
-    const {
-      tipoIncidente,
-      fechaHora,
-      ubicacion,
-      direccion,
-      descripcion,
-      evidencias
-    } = req.body;
-
-    // Validar y geocodificar la ubicación
-    let geocodedLocation;
-    if (ubicacion) {
-      const validationResult = await mapsService.validateLocation(ubicacion.lat, ubicacion.lng);
-      geocodedLocation = {
-        ...ubicacion,
-        formattedAddress: validationResult.address
-      };
-    } else if (direccion) {
-      geocodedLocation = await mapsService.geocode(direccion);
-    } else {
-      throw new Error('Se requiere ubicación o dirección');
-    }
-
-    // Obtener comisarías cercanas
-    const nearbyStations = await mapsService.getNearbyPoliceStations(
-      geocodedLocation.lat,
-      geocodedLocation.lng
-    );
+    const { tipo, descripcion, ubicacion, direccion, barrio } = req.body;
 
     const denuncia = await Denuncia.create({
-      tipoIncidente,
-      fechaHora,
-      ubicacion: {
-        lat: geocodedLocation.lat,
-        lng: geocodedLocation.lng,
-        direccion: geocodedLocation.formattedAddress
-      },
-      direccion: geocodedLocation.formattedAddress,
-      descripcion,
       userId: req.user.id,
-      comisariasCercanas: nearbyStations
-    });
-
-    // Si hay evidencias, las guardamos
-    if (evidencias && evidencias.length > 0) {
-      await Promise.all(
-        evidencias.map(evidencia =>
-          Evidencia.create({
-            ...evidencia,
-            denunciaId: denuncia.id
-          })
-        )
-      );
-    }
-
-    // Obtener la denuncia con sus relaciones
-    const denunciaCompleta = await Denuncia.findByPk(denuncia.id, {
-      include: [
-        { model: Evidencia, as: 'evidencias' },
-        { model: User, as: 'user', attributes: ['id', 'nombre', 'apellido', 'email'] }
-      ]
+      tipo,
+      descripcion,
+      ubicacion,
+      direccion,
+      barrio,
+      estado: 'recibida'
     });
 
     res.status(201).json({
       success: true,
-      data: denunciaCompleta
+      message: 'Denuncia creada exitosamente',
+      data: { denuncia }
     });
   } catch (error) {
-    next(error);
+    console.error('Error al crear denuncia:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al crear la denuncia'
+      }
+    });
   }
 };
 
-// Obtener todas las denuncias (con filtros)
-const getDenuncias = async (req, res, next) => {
+// Obtener denuncias del usuario
+exports.getUserDenuncias = async (req, res) => {
   try {
-    const {
-      tipoIncidente,
-      estado,
-      prioridad,
-      fechaDesde,
-      fechaHasta,
-      page = 1,
-      limit = 10
-    } = req.query;
+    const denuncias = await Denuncia.findAll({
+      where: { userId: req.user.id },
+      order: [['fecha', 'DESC']],
+      include: [{
+        model: Evidencia,
+        attributes: ['id', 'tipo', 'url']
+      }]
+    });
 
+    res.json({
+      success: true,
+      data: { denuncias }
+    });
+  } catch (error) {
+    console.error('Error al obtener denuncias:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al obtener las denuncias'
+      }
+    });
+  }
+};
+
+// Obtener denuncia por ID
+exports.getDenunciaById = async (req, res) => {
+  try {
+    const denuncia = await Denuncia.findByPk(req.params.id, {
+      include: [{
+        model: Evidencia,
+        attributes: ['id', 'tipo', 'url', 'nombreArchivo']
+      }]
+    });
+
+    if (!denuncia) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Denuncia no encontrada'
+        }
+      });
+    }
+
+    // Verificar permisos
+    if (denuncia.userId !== req.user.id && !['operador911', 'admin'].includes(req.user.rol)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'No tiene permisos para ver esta denuncia'
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { denuncia }
+    });
+  } catch (error) {
+    console.error('Error al obtener denuncia:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al obtener la denuncia'
+      }
+    });
+  }
+};
+
+// Obtener todas las denuncias
+exports.getAllDenuncias = async (req, res) => {
+  try {
+    const { estado, tipo, barrio, fechaInicio, fechaFin } = req.query;
+    
     const where = {};
-    if (tipoIncidente) where.tipoIncidente = tipoIncidente;
+    
     if (estado) where.estado = estado;
-    if (prioridad) where.prioridad = prioridad;
-    if (fechaDesde && fechaHasta) {
-      where.fechaHora = {
-        [Op.between]: [new Date(fechaDesde), new Date(fechaHasta)]
+    if (tipo) where.tipo = tipo;
+    if (barrio) where.barrio = barrio;
+    if (fechaInicio && fechaFin) {
+      where.fecha = {
+        [Op.between]: [new Date(fechaInicio), new Date(fechaFin)]
       };
     }
 
-    // Si es un usuario normal, solo puede ver sus propias denuncias
-    if (req.user.role === 'ROLE_USER') {
-      where.userId = req.user.id;
-    }
-
-    const offset = (page - 1) * limit;
-
-    const { count, rows } = await Denuncia.findAndCountAll({
+    const denuncias = await Denuncia.findAll({
       where,
-      include: [
-        { model: Evidencia, as: 'evidencias' },
-        { model: User, as: 'user', attributes: ['id', 'nombre', 'apellido', 'email'] }
-      ],
-      order: [['fechaHora', 'DESC']],
-      limit,
-      offset
+      order: [['fecha', 'DESC']],
+      include: [{
+        model: Evidencia,
+        attributes: ['id', 'tipo', 'url']
+      }]
     });
 
     res.json({
       success: true,
-      data: {
-        denuncias: rows,
-        pagination: {
-          total: count,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          pages: Math.ceil(count / limit)
+      data: { denuncias }
+    });
+  } catch (error) {
+    console.error('Error al obtener denuncias:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al obtener las denuncias'
+      }
+    });
+  }
+};
+
+// Actualizar estado de denuncia
+exports.updateDenunciaEstado = async (req, res) => {
+  try {
+    const { estado } = req.body;
+    const denuncia = await Denuncia.findByPk(req.params.id);
+
+    if (!denuncia) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Denuncia no encontrada'
         }
+      });
+    }
+
+    denuncia.estado = estado;
+    denuncia.ultimaActualizacion = new Date();
+    await denuncia.save();
+
+    res.json({
+      success: true,
+      message: 'Estado de denuncia actualizado',
+      data: { denuncia }
+    });
+  } catch (error) {
+    console.error('Error al actualizar estado:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al actualizar el estado de la denuncia'
       }
     });
-  } catch (error) {
-    next(error);
   }
 };
 
-// Obtener una denuncia específica
-const getDenuncia = async (req, res, next) => {
+// Subir evidencia
+exports.uploadEvidencia = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const where = { id };
-    if (req.user.role === 'ROLE_USER') {
-      where.userId = req.user.id;
-    }
-
-    const denuncia = await Denuncia.findOne({
-      where,
-      include: [
-        { model: Evidencia, as: 'evidencias' },
-        { model: User, as: 'user', attributes: ['id', 'nombre', 'apellido', 'email'] }
-      ]
-    });
+    const denuncia = await Denuncia.findByPk(req.params.id);
 
     if (!denuncia) {
       return res.status(404).json({
         success: false,
-        error: 'Denuncia no encontrada'
+        error: {
+          message: 'Denuncia no encontrada'
+        }
       });
     }
 
-    res.json({
+    // Verificar permisos
+    if (denuncia.userId !== req.user.id && !['operador911', 'admin'].includes(req.user.rol)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'No tiene permisos para subir evidencias a esta denuncia'
+        }
+      });
+    }
+
+    const evidencias = req.files.map(file => ({
+      denunciaId: denuncia.id,
+      tipo: file.mimetype.startsWith('image/') ? 'imagen' : 'video',
+      url: `/uploads/${file.filename}`,
+      nombreArchivo: file.originalname,
+      mimeType: file.mimetype,
+      tamanio: file.size
+    }));
+
+    await Evidencia.bulkCreate(evidencias);
+
+    res.status(201).json({
       success: true,
-      data: denuncia
+      message: 'Evidencias subidas exitosamente',
+      data: { evidencias }
     });
   } catch (error) {
-    next(error);
+    console.error('Error al subir evidencias:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al subir las evidencias'
+      }
+    });
   }
 };
 
-// Actualizar una denuncia
-const updateDenuncia = async (req, res, next) => {
+// Obtener evidencias de una denuncia
+exports.getDenunciaEvidencias = async (req, res) => {
   try {
-    const { id } = req.params;
-    const {
-      tipoIncidente,
-      fechaHora,
-      ubicacion,
-      direccion,
-      descripcion,
-      estado,
-      prioridad,
-      asignadoA
-    } = req.body;
+    const denuncia = await Denuncia.findByPk(req.params.id);
 
-    const where = { id };
-    if (req.user.role === 'ROLE_USER') {
-      where.userId = req.user.id;
-    }
-
-    const denuncia = await Denuncia.findOne({ where });
     if (!denuncia) {
       return res.status(404).json({
         success: false,
-        error: 'Denuncia no encontrada'
+        error: {
+          message: 'Denuncia no encontrada'
+        }
       });
     }
 
-    // Actualizar campos permitidos según el rol
-    const updateData = {};
-    if (tipoIncidente) updateData.tipoIncidente = tipoIncidente;
-    if (fechaHora) updateData.fechaHora = fechaHora;
-    if (ubicacion) updateData.ubicacion = ubicacion;
-    if (direccion) updateData.direccion = direccion;
-    if (descripcion) updateData.descripcion = descripcion;
-
-    // Solo policías y admin pueden actualizar estos campos
-    if (['ROLE_POLICIA', 'ROLE_SUPER_ADMIN'].includes(req.user.role)) {
-      if (estado) updateData.estado = estado;
-      if (prioridad) updateData.prioridad = prioridad;
-      if (asignadoA) updateData.asignadoA = asignadoA;
-    }
-
-    await denuncia.update(updateData);
-
-    // Obtener la denuncia actualizada con sus relaciones
-    const denunciaActualizada = await Denuncia.findByPk(id, {
-      include: [
-        { model: Evidencia, as: 'evidencias' },
-        { model: User, as: 'user', attributes: ['id', 'nombre', 'apellido', 'email'] }
-      ]
-    });
-
-    res.json({
-      success: true,
-      data: denunciaActualizada
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Eliminar una denuncia
-const deleteDenuncia = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const where = { id };
-    if (req.user.role === 'ROLE_USER') {
-      where.userId = req.user.id;
-    }
-
-    const denuncia = await Denuncia.findOne({ where });
-    if (!denuncia) {
-      return res.status(404).json({
+    // Verificar permisos
+    if (denuncia.userId !== req.user.id && !['operador911', 'admin'].includes(req.user.rol)) {
+      return res.status(403).json({
         success: false,
-        error: 'Denuncia no encontrada'
+        error: {
+          message: 'No tiene permisos para ver las evidencias de esta denuncia'
+        }
       });
     }
 
-    await denuncia.destroy();
+    const evidencias = await Evidencia.findAll({
+      where: { denunciaId: denuncia.id }
+    });
 
     res.json({
       success: true,
-      message: 'Denuncia eliminada exitosamente'
+      data: { evidencias }
     });
   } catch (error) {
-    next(error);
+    console.error('Error al obtener evidencias:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al obtener las evidencias'
+      }
+    });
   }
 };
 
-// Obtener estadísticas de denuncias
-const getEstadisticas = async (req, res, next) => {
+// Obtener estadísticas globales
+exports.getStats = async (req, res) => {
   try {
-    const where = {};
-    if (req.user.role === 'ROLE_USER') {
-      where.userId = req.user.id;
-    }
-
-    const totalDenuncias = await Denuncia.count({ where });
-    const denunciasPorTipo = await Denuncia.findAll({
+    const stats = await Denuncia.findAll({
       attributes: [
-        'tipoIncidente',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
-      ],
-      where,
-      group: ['tipoIncidente']
-    });
-
-    const denunciasPorEstado = await Denuncia.findAll({
-      attributes: [
+        'tipo',
         'estado',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+        'barrio',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'total']
       ],
-      where,
-      group: ['estado']
+      group: ['tipo', 'estado', 'barrio']
     });
 
     res.json({
       success: true,
-      data: {
-        totalDenuncias,
-        denunciasPorTipo,
-        denunciasPorEstado
-      }
+      data: { stats }
     });
   } catch (error) {
-    next(error);
+    console.error('Error al obtener estadísticas:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al obtener las estadísticas'
+      }
+    });
   }
 };
 
-module.exports = {
-  createDenuncia,
-  getDenuncias,
-  getDenuncia,
-  updateDenuncia,
-  deleteDenuncia,
-  getEstadisticas
+// Obtener denuncias por barrio
+exports.getDenunciasByBarrio = async (req, res) => {
+  try {
+    const { barrio } = req.params;
+    const denuncias = await Denuncia.findAll({
+      where: { barrio },
+      order: [['fecha', 'DESC']],
+      include: [{
+        model: Evidencia,
+        attributes: ['id', 'tipo', 'url']
+      }]
+    });
+
+    res.json({
+      success: true,
+      data: { denuncias }
+    });
+  } catch (error) {
+    console.error('Error al obtener denuncias por barrio:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al obtener las denuncias del barrio'
+      }
+    });
+  }
 }; 

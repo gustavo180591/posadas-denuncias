@@ -1,42 +1,58 @@
 const { Model, DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-module.exports = (sequelize) => {
-  class Evidencia extends Model {
-    static associate(models) {
-      Evidencia.belongsTo(models.Denuncia, { foreignKey: 'denunciaId' });
+class Evidencia extends Model {}
+
+Evidencia.init({
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  denunciaId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Denuncias',
+      key: 'id'
     }
+  },
+  tipo: {
+    type: DataTypes.ENUM('imagen', 'video'),
+    allowNull: false
+  },
+  url: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  nombreArchivo: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  mimeType: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  tamanio: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    comment: 'Tamaño en bytes'
+  },
+  fechaSubida: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
   }
-
-  Evidencia.init({
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
+}, {
+  sequelize,
+  modelName: 'Evidencia',
+  indexes: [
+    {
+      fields: ['denunciaId']
     },
-    tipo: {
-      type: DataTypes.ENUM('IMAGEN', 'VIDEO', 'AUDIO'),
-      allowNull: false
-    },
-    url: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    nombreArchivo: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    tamano: {
-      type: DataTypes.INTEGER,
-      allowNull: false
-    },
-    formato: {
-      type: DataTypes.STRING,
-      allowNull: false
+    {
+      fields: ['tipo']
     }
-  }, {
-    sequelize,
-    modelName: 'Evidencia'
-  });
+  ]
+});
 
-  return Evidencia;
-}; 
+module.exports = Evidencia; 

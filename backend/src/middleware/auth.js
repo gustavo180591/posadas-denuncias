@@ -1,56 +1,73 @@
 const { verifyToken } = require('../utils/jwt');
-const { User } = require('../models');
+const User = require('../models/User');
 
 const auth = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
+    // Obtener token del header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
-        error: 'No se proporcionó token de autenticación'
+        error: {
+          message: 'Token no proporcionado'
+        }
       });
     }
 
+    const token = authHeader.split(' ')[1];
+
+    // Verificar token
     const decoded = verifyToken(token);
-    if (!decoded) {
-      return res.status(401).json({
-        success: false,
-        error: 'Token inválido o expirado'
-      });
-    }
 
-    const user = await User.findByPk(decoded.id);
+    // Buscar usuario
+    const user = await User.findByPk(decoded.id, {
+      attributes: { exclude: ['password'] }
+    });
+
     if (!user) {
       return res.status(401).json({
         success: false,
-        error: 'Usuario no encontrado'
+        error: {
+          message: 'Usuario no encontrado'
+        }
       });
     }
 
+    // Verificar si el usuario está validado
+    if (user.estado !== 'validado') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'Usuario pendiente de validación'
+        }
+      });
+    }
+
+    // Agregar usuario al request
     req.user = user;
     next();
   } catch (error) {
-    next(error);
+    console.error('Error en autenticación:', error);
+    res.status(401).json({
+      success: false,
+      error: {
+        message: 'No autorizado'
+      }
+    });
   }
 };
 
+// Middleware para verificar rol
 const checkRole = (roles) => {
   return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        error: 'No autenticado'
-      });
-    }
-
-    if (!roles.includes(req.user.role)) {
+    if (!roles.includes(req.user.rol)) {
       return res.status(403).json({
         success: false,
-        error: 'No autorizado para realizar esta acción'
+        error: {
+          message: 'No tiene permisos para realizar esta acción'
+        }
       });
     }
-
     next();
   };
 };

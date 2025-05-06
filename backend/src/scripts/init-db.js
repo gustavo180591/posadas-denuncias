@@ -1,51 +1,57 @@
 require('dotenv').config();
-const sequelize = require('../config/database');
+const { sequelize } = require('../config/database');
 const User = require('../models/User');
 const Denuncia = require('../models/Denuncia');
 const Evidencia = require('../models/Evidencia');
 
-const initDatabase = async () => {
+async function initDatabase() {
   try {
-    // Sincronizar todos los modelos
+    // Sincronizar modelos con la base de datos
     await sequelize.sync({ force: true });
     console.log('Base de datos sincronizada');
 
     // Crear usuario administrador
-    const adminUser = await User.create({
-      email: 'admin@posadasdenuncias.com',
-      password: 'Admin123!',
+    const admin = await User.create({
       nombre: 'Admin',
       apellido: 'Sistema',
       dni: '12345678',
-      role: 'ROLE_SUPER_ADMIN'
+      direccion: 'Calle Principal 123',
+      email: 'admin@sac.posadas.gob.ar',
+      telefono: '3764123456',
+      password: 'Admin123!',
+      fotoRostro: 'admin.jpg',
+      fotoDniFrente: 'admin_dni_frente.jpg',
+      fotoDniDorso: 'admin_dni_dorso.jpg',
+      estado: 'validado',
+      rol: 'admin'
     });
 
-    // Crear usuario policía
-    const policiaUser = await User.create({
-      email: 'policia@posadasdenuncias.com',
-      password: 'Policia123!',
-      nombre: 'Oficial',
-      apellido: 'Policia',
+    console.log('Usuario administrador creado:', admin.email);
+
+    // Crear usuario operador 911
+    const operador = await User.create({
+      nombre: 'Operador',
+      apellido: '911',
       dni: '87654321',
-      role: 'ROLE_POLICIA'
+      direccion: 'Calle Secundaria 456',
+      email: 'operador@sac.posadas.gob.ar',
+      telefono: '3764654321',
+      password: 'Operador123!',
+      fotoRostro: 'operador.jpg',
+      fotoDniFrente: 'operador_dni_frente.jpg',
+      fotoDniDorso: 'operador_dni_dorso.jpg',
+      estado: 'validado',
+      rol: 'operador911'
     });
 
-    // Crear usuario normal
-    const normalUser = await User.create({
-      email: 'usuario@posadasdenuncias.com',
-      password: 'Usuario123!',
-      nombre: 'Usuario',
-      apellido: 'Normal',
-      dni: '11223344',
-      role: 'ROLE_USER'
-    });
+    console.log('Usuario operador creado:', operador.email);
 
-    console.log('Usuarios de prueba creados');
+    console.log('Inicialización de la base de datos completada');
     process.exit(0);
   } catch (error) {
     console.error('Error al inicializar la base de datos:', error);
     process.exit(1);
   }
-};
+}
 
 initDatabase(); 

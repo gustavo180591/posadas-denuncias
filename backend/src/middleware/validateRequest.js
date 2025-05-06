@@ -5,8 +5,10 @@ const validateRequest = (req, res, next) => {
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
-      error: 'Error de validación',
-      details: errors.array()
+      error: {
+        message: 'Error de validación',
+        details: errors.array()
+      }
     });
   }
   next();

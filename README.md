@@ -1,120 +1,125 @@
-# Sistema de Denuncias Ciudadanas - Posadas
+# SAC - Sistema de Alerta Ciudadana
 
-Sistema integral para la gestión de denuncias ciudadanas en la ciudad de Posadas, permitiendo a los ciudadanos reportar incidentes de seguridad de manera rápida y eficiente.
+Sistema integral para el registro, validación y seguimiento de denuncias ciudadanas en Posadas, gestionado por el 911.
 
-## Características Principales
+## 🚀 Características Principales
 
-- 🖥️ Aplicación web responsiva
-- 📱 Aplicación móvil nativa (Android/iOS)
-- 🔒 Sistema de autenticación seguro
-- 📍 Geolocalización de incidentes
-- 📸 Carga de evidencias multimedia
-- 🔄 Sincronización offline
-- 👮‍♂️ Gestión de roles y permisos
-- 📊 Panel de administración
+- Registro de usuarios con validación manual
+- Sistema de denuncias con geolocalización
+- Chat automático con respuestas predeterminadas
+- Panel administrativo para el 911
+- Aplicación web progresiva (PWA)
+- Interfaz responsiva para web y móvil
 
-## Tecnologías Utilizadas
+## 🛠 Tecnologías
 
-### Frontend Web
-- React.js
-- Material-UI
-- Redux Toolkit
-- Google Maps API
+### Frontend
+- React 18
+- TailwindCSS
+- LeafletJS para mapas
+- PWA capabilities
+- WebSocket para chat en tiempo real
 
 ### Backend
-- Node.js
-- Express.js
-- PostgreSQL
-- JWT Authentication
+- Node.js + Express
+- MySQL
+- JWT para autenticación
+- WebSocket para chat
 
-### Aplicación Móvil
-- React Native
-- Expo
-- Redux Toolkit
-- React Native Maps
+### Infraestructura
+- Docker
+- Nginx
+- CI/CD con GitHub Actions
 
-## Estructura del Proyecto
+## 📋 Requisitos Previos
 
-```
-posadas-denuncias/
-├── frontend/              # Aplicación web React
-├── mobile/               # Aplicación móvil React Native
-├── backend/              # API REST Node.js
-├── docs/                 # Documentación
-└── docker/              # Configuración Docker
-```
-
-## Requisitos del Sistema
-
-- Node.js >= 18.x
-- PostgreSQL >= 14
-- Docker (opcional)
+- Node.js 18+
+- Docker y Docker Compose
+- MySQL 8.0+
 - npm o yarn
 
-## Instalación
+## 🚀 Instalación
 
 1. Clonar el repositorio:
 ```bash
-git clone https://github.com/tu-usuario/posadas-denuncias.git
-cd posadas-denuncias
+git clone https://github.com/your-org/sac.git
+cd sac
 ```
 
-2. Instalar dependencias del backend:
+2. Instalar dependencias:
 ```bash
-cd backend
-npm install
-```
-
-3. Instalar dependencias del frontend:
-```bash
-cd ../frontend
-npm install
-```
-
-4. Instalar dependencias de la app móvil:
-```bash
-cd ../mobile
-npm install
-```
-
-## Configuración
-
-1. Crear archivo `.env` en el directorio backend:
-```env
-PORT=3000
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=posadas_denuncias
-DB_USER=tu_usuario
-DB_PASSWORD=tu_contraseña
-JWT_SECRET=tu_secreto_jwt
-GOOGLE_MAPS_API_KEY=tu_api_key
-```
-
-2. Configurar variables de entorno para el frontend y la app móvil según sea necesario.
-
-## Desarrollo
-
-Para iniciar el servidor de desarrollo:
-
-```bash
-# Backend
-cd backend
-npm run dev
-
 # Frontend
 cd frontend
-npm start
+npm install
 
-# Mobile
-cd mobile
-npm start
+# Backend
+cd ../backend
+npm install
 ```
 
-## Licencia
+3. Configurar variables de entorno:
+```bash
+cp .env.example .env
+# Editar .env con tus configuraciones
+```
 
-Este proyecto está bajo la Licencia MIT.
+4. Iniciar con Docker:
+```bash
+docker-compose up -d
+```
 
-## Contacto
+## 🔧 Configuración
 
-Para más información, contactar a [tu-email@ejemplo.com]
+### Variables de Entorno
+
+Crear archivo `.env` en la raíz del proyecto:
+
+```env
+# Backend
+DB_HOST=localhost
+DB_USER=root
+DB_PASS=your_password
+DB_NAME=sac_db
+JWT_SECRET=your_jwt_secret
+PORT=3000
+
+# Frontend
+REACT_APP_API_URL=http://localhost:3000
+REACT_APP_MAPS_API_KEY=your_maps_api_key
+```
+
+## 📱 Uso
+
+1. Acceder a la aplicación web: `http://localhost:3000`
+2. Registrarse como nuevo usuario
+3. Esperar validación por parte del 911
+4. Una vez validado, podrá realizar denuncias
+
+## 👥 Roles de Usuario
+
+- **Ciudadano**: Registro y denuncias
+- **Operador 911**: Validación de usuarios y gestión de denuncias
+- **Admin**: Gestión completa del sistema
+
+## 🔒 Seguridad
+
+- Autenticación JWT
+- Validación manual de usuarios
+- Encriptación de datos sensibles
+- Protección contra ataques comunes
+
+## 📄 Licencia
+
+Este proyecto es propiedad de la Municipalidad de Posadas.
+
+## 🤝 Contribución
+
+1. Fork el proyecto
+2. Crear rama feature (`git checkout -b feature/AmazingFeature`)
+3. Commit cambios (`git commit -m 'Add some AmazingFeature'`)
+4. Push a la rama (`git push origin feature/AmazingFeature`)
+5. Abrir Pull Request
+
+## 📞 Soporte
+
+Para soporte técnico, contactar al equipo de desarrollo del 911. 

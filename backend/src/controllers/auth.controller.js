@@ -1,219 +1,277 @@
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const { User } = require('../models');
-const { generateToken, generateRefreshToken } = require('../utils/jwt');
+const User = require('../models/User');
+const { sendValidationEmail } = require('../utils/email');
 
-const register = async (req, res, next) => {
+// Generar token JWT
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user.id, email: user.email, rol: user.rol },
+    process.env.JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+};
+
+// Registro de usuario
+exports.register = async (req, res) => {
   try {
-    const { email, password, nombre, apellido, dni, telefono } = req.body;
+    const {
+      nombre,
+      apellido,
+      dni,
+      direccion,
+      email,
+      telefono,
+      password,
+      fotoRostro,
+      fotoDniFrente,
+      fotoDniDorso
+    } = req.body;
 
     // Verificar si el usuario ya existe
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await User.findOne({
+      where: {
+        [Op.or]: [{ email }, { dni }]
+      }
+    });
+
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        error: 'El email ya está registrado'
+        error: {
+          message: 'El email o DNI ya está registrado'
+        }
       });
     }
 
     // Crear nuevo usuario
     const user = await User.create({
-      email,
-      password,
       nombre,
       apellido,
       dni,
-      telefono
+      direccion,
+      email,
+      telefono,
+      password,
+      fotoRostro,
+      fotoDniFrente,
+      fotoDniDorso,
+      estado: 'pendiente'
     });
 
-    // Generar tokens
-    const token = generateToken(user);
-    const refreshToken = generateRefreshToken(user);
+    // Enviar email de validación
+    await sendValidationEmail(user.email, user.nombre);
 
     res.status(201).json({
       success: true,
+      message: 'Usuario registrado exitosamente. Aguarde la validación por parte del 911.',
       data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          nombre: user.nombre,
-          apellido: user.apellido,
-          role: user.role
-        },
-        token,
-        refreshToken
+        id: user.id,
+        email: user.email,
+        estado: user.estado
       }
     });
   } catch (error) {
-    next(error);
+    console.error('Error en registro:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al registrar usuario'
+      }
+    });
   }
 };
 
-const login = async (req, res, next) => {
+// Login
+exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     // Buscar usuario
     const user = await User.findOne({ where: { email } });
+
     if (!user) {
       return res.status(401).json({
         success: false,
-        error: 'Credenciales inválidas'
+        error: {
+          message: 'Credenciales inválidas'
+        }
       });
     }
 
     // Verificar contraseña
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
+    const isValidPassword = await user.comparePassword(password);
+
+    if (!isValidPassword) {
       return res.status(401).json({
         success: false,
-        error: 'Credenciales inválidas'
+        error: {
+          message: 'Credenciales inválidas'
+        }
       });
     }
 
-    // Generar tokens
+    // Verificar si el usuario está validado
+    if (user.estado !== 'validado') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'Usuario pendiente de validación'
+        }
+      });
+    }
+
+    // Actualizar último acceso
+    user.ultimoAcceso = new Date();
+    await user.save();
+
+    // Generar token
     const token = generateToken(user);
-    const refreshToken = generateRefreshToken(user);
 
     res.json({
       success: true,
       data: {
+        token,
         user: {
           id: user.id,
-          email: user.email,
           nombre: user.nombre,
           apellido: user.apellido,
-          role: user.role
-        },
-        token,
-        refreshToken
+          email: user.email,
+          rol: user.rol
+        }
       }
     });
   } catch (error) {
-    next(error);
-  }
-};
-
-const refreshToken = async (req, res, next) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (!refreshToken) {
-      return res.status(401).json({
-        success: false,
-        error: 'Token de actualización no proporcionado'
-      });
-    }
-
-    try {
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-      const user = await User.findByPk(decoded.id);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          error: 'Usuario no encontrado'
-        });
+    console.error('Error en login:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al iniciar sesión'
       }
-
-      const token = generateToken(user);
-      const newRefreshToken = generateRefreshToken(user);
-
-      res.json({
-        success: true,
-        data: {
-          token,
-          refreshToken: newRefreshToken
-        }
-      });
-    } catch (error) {
-      return res.status(401).json({
-        success: false,
-        error: 'Token de actualización inválido'
-      });
-    }
-  } catch (error) {
-    next(error);
+    });
   }
 };
 
-const logout = (req, res) => {
-  res.json({
-    success: true,
-    message: 'Sesión cerrada exitosamente'
-  });
-};
-
-const forgotPassword = async (req, res, next) => {
+// Obtener perfil
+exports.getProfile = async (req, res) => {
   try {
-    const { email } = req.body;
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findByPk(req.user.id, {
+      attributes: { exclude: ['password'] }
+    });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        error: 'Usuario no encontrado'
+        error: {
+          message: 'Usuario no encontrado'
+        }
       });
     }
 
-    // Generar token de restablecimiento
-    const resetToken = jwt.sign(
-      { id: user.id },
-      process.env.JWT_RESET_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    // TODO: Enviar email con el token
-    // Por ahora solo devolvemos el token
     res.json({
       success: true,
+      data: { user }
+    });
+  } catch (error) {
+    console.error('Error al obtener perfil:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al obtener perfil'
+      }
+    });
+  }
+};
+
+// Actualizar perfil
+exports.updateProfile = async (req, res) => {
+  try {
+    const { nombre, apellido, direccion, telefono } = req.body;
+    const user = await User.findByPk(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Usuario no encontrado'
+        }
+      });
+    }
+
+    // Actualizar campos
+    if (nombre) user.nombre = nombre;
+    if (apellido) user.apellido = apellido;
+    if (direccion) user.direccion = direccion;
+    if (telefono) user.telefono = telefono;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Perfil actualizado exitosamente',
       data: {
-        resetToken
+        user: {
+          id: user.id,
+          nombre: user.nombre,
+          apellido: user.apellido,
+          email: user.email,
+          direccion: user.direccion,
+          telefono: user.telefono
+        }
       }
     });
   } catch (error) {
-    next(error);
+    console.error('Error al actualizar perfil:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al actualizar perfil'
+      }
+    });
   }
 };
 
-const resetPassword = async (req, res, next) => {
+// Cambiar contraseña
+exports.changePassword = async (req, res) => {
   try {
-    const { resetToken, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findByPk(req.user.id);
 
-    try {
-      const decoded = jwt.verify(resetToken, process.env.JWT_RESET_SECRET);
-      const user = await User.findByPk(decoded.id);
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          error: 'Usuario no encontrado'
-        });
-      }
-
-      user.password = newPassword;
-      await user.save();
-
-      res.json({
-        success: true,
-        message: 'Contraseña actualizada exitosamente'
-      });
-    } catch (error) {
-      return res.status(401).json({
+    if (!user) {
+      return res.status(404).json({
         success: false,
-        error: 'Token de restablecimiento inválido o expirado'
+        error: {
+          message: 'Usuario no encontrado'
+        }
       });
     }
-  } catch (error) {
-    next(error);
-  }
-};
 
-module.exports = {
-  register,
-  login,
-  refreshToken,
-  logout,
-  forgotPassword,
-  resetPassword
+    // Verificar contraseña actual
+    const isValidPassword = await user.comparePassword(currentPassword);
+
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: 'Contraseña actual incorrecta'
+        }
+      });
+    }
+
+    // Actualizar contraseña
+    user.password = newPassword;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Contraseña actualizada exitosamente'
+    });
+  } catch (error) {
+    console.error('Error al cambiar contraseña:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Error al cambiar contraseña'
+      }
+    });
+  }
 }; 

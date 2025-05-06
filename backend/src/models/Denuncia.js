@@ -1,75 +1,83 @@
 const { Model, DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-module.exports = (sequelize) => {
-  class Denuncia extends Model {
-    static associate(models) {
-      Denuncia.belongsTo(models.User, { foreignKey: 'userId' });
-      Denuncia.hasMany(models.Evidencia, { foreignKey: 'denunciaId' });
+class Denuncia extends Model {}
+
+Denuncia.init({
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'Users',
+      key: 'id'
     }
+  },
+  tipo: {
+    type: DataTypes.ENUM(
+      'robo',
+      'hurto',
+      'vandalismo',
+      'acoso',
+      'violencia',
+      'otro'
+    ),
+    allowNull: false
+  },
+  descripcion: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  ubicacion: {
+    type: DataTypes.GEOMETRY('POINT'),
+    allowNull: false
+  },
+  direccion: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  barrio: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  estado: {
+    type: DataTypes.ENUM(
+      'recibida',
+      'en_proceso',
+      'resuelta',
+      'archivada'
+    ),
+    defaultValue: 'recibida'
+  },
+  fecha: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
+  },
+  ultimaActualizacion: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
   }
-
-  Denuncia.init({
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
+}, {
+  sequelize,
+  modelName: 'Denuncia',
+  indexes: [
+    {
+      fields: ['userId']
     },
-    tipoIncidente: {
-      type: DataTypes.ENUM(
-        'ROBO',
-        'VANDALISMO',
-        'AGRESION',
-        'ACOSO',
-        'OTRO'
-      ),
-      allowNull: false
+    {
+      fields: ['estado']
     },
-    fechaHora: {
-      type: DataTypes.DATE,
-      allowNull: false
+    {
+      fields: ['tipo']
     },
-    ubicacion: {
-      type: DataTypes.GEOMETRY('POINT'),
-      allowNull: false
-    },
-    direccion: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    descripcion: {
-      type: DataTypes.TEXT,
-      allowNull: false
-    },
-    estado: {
-      type: DataTypes.ENUM(
-        'PENDIENTE',
-        'EN_PROCESO',
-        'RESUELTA',
-        'CERRADA'
-      ),
-      defaultValue: 'PENDIENTE'
-    },
-    prioridad: {
-      type: DataTypes.ENUM(
-        'BAJA',
-        'MEDIA',
-        'ALTA',
-        'URGENTE'
-      ),
-      defaultValue: 'MEDIA'
-    },
-    asignadoA: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: 'Users',
-        key: 'id'
-      }
+    {
+      fields: ['barrio']
     }
-  }, {
-    sequelize,
-    modelName: 'Denuncia'
-  });
+  ]
+});
 
-  return Denuncia;
-}; 
+module.exports = Denuncia; 
